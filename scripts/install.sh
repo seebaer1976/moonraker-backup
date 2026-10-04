@@ -84,11 +84,33 @@ else
 fi
 
 echo
+
+# Optional: Klipper macro include in printer.cfg
+PRINTER_CFG="${CONFIG_DIR}/printer.cfg"
+MACRO_INCLUDE="[include ${ROOT_DIR}/klipper_macro/backup.cfg]"
+# Prefer relative-style path that works on typical installs
+MACRO_LINE='[include ~/moonraker-backup/klipper_macro/backup.cfg]'
+
+if [[ -f "${PRINTER_CFG}" ]]; then
+  if grep -qE 'klipper_macro/backup\.cfg' "${PRINTER_CFG}"; then
+    echo "OK  Klipper macro include already in printer.cfg"
+  else
+    {
+      echo ""
+      echo "# ----- moonraker-backup macro -----"
+      echo "${MACRO_LINE}"
+    } >> "${PRINTER_CFG}"
+    echo "OK  added macro include to ${PRINTER_CFG}"
+  fi
+else
+  echo "WARN ${PRINTER_CFG} not found – add manually:"
+  echo "     ${MACRO_LINE}"
+fi
+
+
+echo
 echo "Fertig. Moonraker neu starten:"
 echo "  sudo systemctl restart moonraker"
 echo
 echo "Status testen:"
 echo "  curl -s http://127.0.0.1:7125/machine/backup/status | head"
-echo
-echo "Optional Klipper:"
-echo "  [include ${ROOT_DIR}/klipper_macro/backup.cfg]"
