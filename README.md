@@ -27,7 +27,7 @@ Inspiriert von [Klipper-Backup](https://github.com/Staubgeborener/Klipper-Backup
 
 ```bash
 cd ~
-git clone https://github.com/DEIN_USER/moonraker-backup.git
+git clone https://github.com/seebaer1976/moonraker-backup.git
 cd ~/moonraker-backup
 chmod +x scripts/install.sh
 ./scripts/install.sh
@@ -48,30 +48,38 @@ In `~/printer_data/config/moonraker.conf` eintragen:
 [update_manager moonraker-backup]
 type: git_repo
 path: ~/moonraker-backup
-origin: https://github.com/DEIN_USER/moonraker-backup.git
+origin: https://github.com/seebaer1976/moonraker-backup.git
 primary_branch: main
 managed_services: moonraker
 install_script: scripts/install.sh
 ```
 
-`DEIN_USER` und ggf. `primary_branch` an dein Repo anpassen.  
+`seebaer1976` und ggf. `primary_branch` an dein Repo anpassen.  
 Danach Moonraker neu starten – das Plugin erscheint unter **Maschine → Update**.
 
-### Abschnitt `[backup]` (optional)
+### Settings-Datei (wird vom Installer angelegt)
+
+`~/printer_data/config/moonraker-backup-settings.cfg`:
 
 ```ini
 [backup]
-# Standard: gesamtes printer_data/config
-# source_path: ~/printer_data/config
-# storage_path: ~/printer_data/backups
-# max_backups: 20
-# exclude: .git,*.pyc,__pycache__,.DS_Store
-# name_prefix: config-backup
-# block_during_print: True
-# backup_before_update: True
+source_path: ~/printer_data/config
+storage_path: ~/printer_data/backups
+max_backups: 20
+exclude: .git,*.pyc,__pycache__,.DS_Store
+name_prefix: config-backup
+block_during_print: True
+backup_before_update: True
 ```
 
-Werte, die hier gesetzt sind, sind in der UI/API **nicht änderbar** (wie bei Timelapse `blockedsettings`).
+Änderungen über die **Web-UI / API** werden in diese Datei zurückgeschrieben  
+(und zusätzlich in der Moonraker-DB gemerkt). Nach einem Moonraker-Neustart bleiben sie erhalten.
+
+In `moonraker.conf` steht dazu:
+
+```ini
+[include moonraker-backup-settings.cfg]
+```
 
 ## Klipper-Macro (optional)
 

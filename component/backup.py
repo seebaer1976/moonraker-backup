@@ -52,6 +52,11 @@ class Backup:
         self.storage_path = Path(os.path.expanduser(storage_cfg)).resolve()
         self.storage_path.mkdir(parents=True, exist_ok=True)
 
+        # GUI/API persist settings here (included from moonraker.conf)
+        self.settings_file = Path(
+            self.data_path / "config" / "moonraker-backup-settings.cfg"
+        )
+
         self.config: Dict[str, Any] = {
             "enabled": True,
             "source_path": str(self.source_path),
@@ -189,7 +194,11 @@ class Backup:
             self._busy = False
 
     def _apply_conf_overrides(self) -> None:
-        blocked: List[str] = []
+        """Load [backup] options from moonraker include file.
+
+        Settings stay editable in the UI and are written back to
+        moonraker-backup-settings.cfg (not locked like timelapse blockedsettings).
+        """
         mapping = {
             "enabled": ("getboolean", bool),
             "source_path": ("get", str),
@@ -205,17 +214,17 @@ class Backup:
             if self.confighelper.has_option(key):
                 getter = getattr(self.confighelper, method)
                 self.config[key] = getter(key)
-                blocked.append(key)
                 if key == "source_path":
                     self.source_path = Path(
-                        os.path.expanduser(self.config[key])
+                        os.path.expanduser(str(self.config[key]))
                     ).resolve()
                 if key == "storage_path":
                     self.storage_path = Path(
-                        os.path.expanduser(self.config[key])
+                        os.path.expanduser(str(self.config[key]))
                     ).resolve()
                     self.storage_path.mkdir(parents=True, exist_ok=True)
-        self.config["blockedsettings"] = blocked
+        # empty = all settings changeable in GUI
+        self.config["blockedsettings"] = []
 
     def _exclude_list(self) -> List[str]:
         raw = self.config.get("exclude") or ""
@@ -380,7 +389,28 @@ class Backup:
             "safety_backup": safety,
         }
 
+    def _write_settings_file_sync(self) -> None:
+        """Persist current settings to moonraker-backup-settings.cfg."""
+        lines = [
+            "# moonraker-backup settings – changeable via Web-UI / API",
+            "# Written automatically; safe to edit manually too.",
+            "[backup]",
+            "# Standard: gesamtes printer_data/config",
+            f"source_path: {self.config.get('source_path', '~/printer_data/config')}",
+            f"storage_path: {self.config.get('storage_path', '~/printer_data/backups')}",
+            f"max_backups: {int(self.config.get('max_backups', 20))}",
+            f"exclude: {self.config.get('exclude', '.git,*.pyc,__pycache__,.DS_Store')}",
+            f"name_prefix: {self.config.get('name_prefix', 'config-backup')}",
+            f"block_during_print: {str(bool(self.config.get('block_during_print', True)))}",
+            f"backup_before_update: {str(bool(self.config.get('backup_before_update', True)))}",
+            "",
+        ]
+        self.settings_file.parent.mkdir(parents=True, exist_ok=True)
+        self.settings_file.write_text("\n".join(lines), encoding="utf-8")
+        logging.info("backup: settings saved to %s", self.settings_file)
+
     async def _handle_status(self, webrequest: WebRequest) -> Dict[str, Any]:
+
         backups = await self.eventloop.run_in_thread(self._list_backups_sync)
         last = backups[0] if backups else None
         return {
@@ -477,11 +507,8 @@ class Backup:
         action = webrequest.get_action()
         if action == "POST":
             args = webrequest.get_args()
-            blocked = set(self.config.get("blockedsettings") or [])
-            for key, value in args.items():
-                if key in blocked or key == "blockedsettings":
-                    continue
-                if key not in self.config:
+            for key in list(args.keys()):
+                if key == "blockedsettings" or key not in self.config:
                     continue
                 cur = self.config[key]
                 if isinstance(cur, bool):
@@ -495,22 +522,25 @@ class Backup:
                 self.database.insert_item(
                     DB_NAMESPACE, f"config.{key}", self.config[key]
                 )
-            if "source_path" in args and "source_path" not in blocked:
+            if "source_path" in args:
                 self.source_path = Path(
-                    os.path.expanduser(self.config["source_path"])
+                    os.path.expanduser(str(self.config["source_path"]))
                 ).resolve()
-            if "storage_path" in args and "storage_path" not in blocked:
+            if "storage_path" in args:
                 self.storage_path = Path(
-                    os.path.expanduser(self.config["storage_path"])
+                    os.path.expanduser(str(self.config["storage_path"]))
                 ).resolve()
                 self.storage_path.mkdir(parents=True, exist_ok=True)
+            # persist into config file (included by moonraker.conf)
+            await self.eventloop.run_in_thread(self._write_settings_file_sync)
         return {
             "settings": {
                 k: v
                 for k, v in self.config.items()
                 if k != "blockedsettings"
             },
-            "blockedsettings": self.config.get("blockedsettings", []),
+            "blockedsettings": [],
+            "settings_file": str(self.settings_file),
         }
 
     async def _handle_download(self, webrequest: WebRequest) -> Dict[str, Any]:
