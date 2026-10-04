@@ -1,27 +1,29 @@
 # moonraker-backup
 
-Moonraker-Komponente für **lokale ZIP-Backups** deiner Klipper-Config (`printer_data/config/`).
+Moonraker component for **local ZIP backups** of the Klipper config directory (`printer_data/config/`).
 
-Inspiriert von [Klipper-Backup](https://github.com/Staubgeborener/Klipper-Backup) und dem API-Muster von [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-timelapse).
+Inspired by [Klipper-Backup](https://github.com/Staubgeborener/Klipper-Backup) and the API pattern of [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-timelapse).
+
+Deutsch siehe Abschnitte unten – die Befehle sind universell.
 
 ## Features
 
-| Feature | Beschreibung |
-|--------|----------------|
-| Manuelles Backup | ZIP der Config per API / Macro / Web-UI |
-| Liste | Zeitpunkt, Größe, Dateianzahl |
-| Download | Über Moonraker File-API |
-| Restore | Mit automatischem Safety-Backup vorher |
-| Druck-Sperre | Kein Create/Restore bei `printing` / `paused` |
-| Auto vor Update | Ein ZIP, sobald der Update Manager ein Update startet |
-| Settings-API | Wie Timelapse: GET/POST `/machine/backup/settings` |
+| Feature | Description |
+|--------|-------------|
+| Manual backup | ZIP of config via API / macro / web UI |
+| List | Timestamp, size, file count |
+| Download | Via Moonraker file API |
+| Restore | Creates a safety backup first |
+| Print lock | No create/restore while `printing` or `paused` |
+| Auto before update | One ZIP when the Update Manager starts an update |
+| Settings API | GET/POST `/machine/backup/settings` (timelapse-style) |
 
-> **Hinweis Mainsail:** Einen Tab unter den Zahnrädern (⚙) kann nur Mainsail selbst einbauen (wie bei Timelapse). Dieses Repo liefert die Moonraker-API und eine eigene Web-UI unter `ui/index.html`.
+> **Mainsail note:** A tab under the gear icon (⚙) requires upstream Mainsail support (like timelapse). This project provides the Moonraker API and a standalone UI at `ui/index.html`.
 
-## Voraussetzungen
+## Requirements
 
-- Klipper + Moonraker (z. B. MainsailOS)
-- Schreibrechte auf `~/moonraker` und `~/printer_data`
+- Klipper + Moonraker (e.g. MainsailOS)
+- Write access to `~/moonraker` and `~/printer_data`
 
 ## Installation
 
@@ -34,15 +36,17 @@ chmod +x scripts/install.sh
 sudo systemctl restart moonraker
 ```
 
-Das Install-Skript:
+The install script will:
 
-1. kopiert `component/backup.py` nach `~/moonraker/moonraker/components/backup.py`
-2. legt `[backup]` in `moonraker.conf` an (falls fehlend)
-3. erzeugt `~/printer_data/backups/`
+1. Copy `component/backup.py` into `~/moonraker/moonraker/components/backup.py`
+2. Create `~/printer_data/config/moonraker-backup-settings.cfg` (if missing)
+3. Add `[include moonraker-backup-settings.cfg]` to `moonraker.conf` (if missing)
+4. Add the `[update_manager moonraker-backup]` block (if missing)
+5. Create `~/printer_data/backups/`
 
-### Moonraker Update Manager (empfohlen)
+### Moonraker Update Manager
 
-In `~/printer_data/config/moonraker.conf` eintragen:
+Usually added automatically by `install.sh`. Manual entry for `moonraker.conf`:
 
 ```ini
 [update_manager moonraker-backup]
@@ -54,12 +58,11 @@ managed_services: moonraker
 install_script: scripts/install.sh
 ```
 
-`seebaer1976` und ggf. `primary_branch` an dein Repo anpassen.  
-Danach Moonraker neu starten – das Plugin erscheint unter **Maschine → Update**.
+Restart Moonraker afterwards. The component should appear under **Machine → Update** in Mainsail/Fluidd.
 
-### Settings-Datei (wird vom Installer angelegt)
+### Settings file
 
-`~/printer_data/config/moonraker-backup-settings.cfg`:
+Path: `~/printer_data/config/moonraker-backup-settings.cfg`
 
 ```ini
 [backup]
@@ -72,16 +75,15 @@ block_during_print: True
 backup_before_update: True
 ```
 
-Änderungen über die **Web-UI / API** werden in diese Datei zurückgeschrieben  
-(und zusätzlich in der Moonraker-DB gemerkt). Nach einem Moonraker-Neustart bleiben sie erhalten.
+Changes made via the **web UI or API** are written back to this file (and stored in the Moonraker database). They survive a Moonraker restart.
 
-In `moonraker.conf` steht dazu:
+`moonraker.conf` only needs:
 
 ```ini
 [include moonraker-backup-settings.cfg]
 ```
 
-## Klipper-Macro (optional)
+## Optional Klipper macro
 
 In `printer.cfg`:
 
@@ -89,110 +91,102 @@ In `printer.cfg`:
 [include ~/moonraker-backup/klipper_macro/backup.cfg]
 ```
 
-Oder manuell:
+Or:
 
 ```ini
 [gcode_macro BACKUP_CONFIG]
-description: ZIP-Backup der Config über Moonraker
+description: Create a ZIP backup of the config via Moonraker
 gcode:
     {action_call_remote_method("backup_create", note="from-macro")}
 ```
 
-## Web-UI
+## Web UI
 
-Datei im Browser öffnen:
+Open in a browser:
 
 ```text
-~/moonraker-backup/ui/index.html
+file:///home/pi/moonraker-backup/ui/index.html
 ```
 
-Moonraker-URL eintragen, z. B. `http://172.16.x.x:7125` oder `http://ender3.local:7125`.
+(or copy/serve `ui/index.html`). Set the Moonraker base URL, e.g. `http://printer.local:7125`.
 
-## API-Übersicht
+## API
 
-| Methode | Endpoint | Beschreibung |
-|---------|----------|--------------|
-| GET | `/machine/backup/status` | Status, letztes Backup, Settings |
-| GET | `/machine/backup/list` | Alle Backups |
-| POST | `/machine/backup/create` | Backup (`note` optional) |
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/machine/backup/status` | Status, last backup, settings |
+| GET | `/machine/backup/list` | All backups |
+| POST | `/machine/backup/create` | Create backup (`note` optional) |
 | POST | `/machine/backup/delete` | `filename=...` |
 | POST | `/machine/backup/restore` | `filename=...` |
-| GET/POST | `/machine/backup/settings` | Settings lesen/schreiben |
-| GET | `/server/files/backups/<datei.zip>` | Download |
+| GET/POST | `/machine/backup/settings` | Read/write settings |
+| GET | `/server/files/backups/<file.zip>` | Download |
 
-### Beispiele
+### Examples
 
 ```bash
-# Status
-curl http://127.0.0.1:7125/machine/backup/status
+curl -s http://127.0.0.1:7125/machine/backup/status
 
-# Backup erstellen
-curl -X POST http://127.0.0.1:7125/machine/backup/create -d "note=vor-test"
+curl -X POST http://127.0.0.1:7125/machine/backup/create -d "note=before-change"
 
-# Liste
-curl http://127.0.0.1:7125/machine/backup/list
+curl -s http://127.0.0.1:7125/machine/backup/list
 
-# Download
 curl -OJ http://127.0.0.1:7125/server/files/backups/config-backup_YYYYMMDD_HHMMSS.zip
 ```
 
-## Verhalten
+## Behaviour
 
-### Während eines Drucks
+### During a print
 
-Wenn `block_during_print: True` (Standard):
+With `block_during_print: True` (default):
 
-- **Create** und **Restore** sind gesperrt, solange der Drucker `printing` oder `paused` ist
-- Antwort: HTTP 409 mit Hinweis
+- **Create** and **restore** are rejected while the printer is `printing` or `paused` (HTTP 409)
 
-### Vor Updates (Update Manager)
+### Before software updates
 
-Wenn `backup_before_update: True` (Standard):
+With `backup_before_update: True` (default):
 
-- Beim Start eines Updates über Mainsail/Fluidd (Klipper, Moonraker, Clients, …) wird **ein** Config-ZIP angelegt
-- Notiz z. B. `auto-before-update:klipper`
+- When the Update Manager starts an update (Klipper, Moonraker, clients, …), **one** config ZIP is created
+- Note example: `auto-before-update:klipper`
 
-Moonraker bietet keinen offiziellen Pre-Update-Hook; das Plugin nutzt das Event `update_manager:update_response` (best-effort).
+Moonraker has no official pre-update hook; this uses the `update_manager:update_response` event (best-effort).
 
 ### Restore
 
-Vor dem Überschreiben der Config wird automatisch ein Safety-Backup erzeugt.  
-Danach ggf. **FIRMWARE_RESTART** / Config prüfen.
+A safety backup is created before files under `source_path` are overwritten.  
+Run a config check / `FIRMWARE_RESTART` if needed afterwards.
 
-## Deinstallation
+## Uninstall
 
 ```bash
 rm -f ~/moonraker/moonraker/components/backup.py
-# [backup] und [update_manager moonraker-backup] aus moonraker.conf entfernen
+# Remove [include moonraker-backup-settings.cfg] and
+# [update_manager moonraker-backup] from moonraker.conf
 sudo systemctl restart moonraker
 ```
 
-Backups unter `~/printer_data/backups/` bleiben erhalten, bis du sie löschst.
+ZIP files under `~/printer_data/backups/` are left in place.
 
-## Projektstruktur
+## Project layout
 
 ```text
 moonraker-backup/
 ├── README.md
 ├── LICENSE
 ├── .gitignore
-├── component/
-│   └── backup.py          # Moonraker-Komponente
-├── scripts/
-│   └── install.sh         # Installation + Config-Snippet
-├── klipper_macro/
-│   └── backup.cfg         # BACKUP_CONFIG Macro
-├── ui/
-│   └── index.html         # Einfache Web-UI
-└── moonraker-example.conf # Beispiel-Einträge
+├── moonraker-example.conf
+├── component/backup.py
+├── scripts/install.sh
+├── klipper_macro/backup.cfg
+└── ui/index.html
 ```
 
-## Lizenz
+## License
 
-GNU GPLv3 – siehe [LICENSE](LICENSE).
+GNU GPLv3 – see [LICENSE](LICENSE).
 
 ## Credits
 
 - [Moonraker](https://github.com/Arksine/moonraker)
-- [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-timelapse) (API-Muster)
-- [Klipper-Backup](https://github.com/Staubgeborener/Klipper-Backup) (Idee Git-Backups)
+- [moonraker-timelapse](https://github.com/mainsail-crew/moonraker-timelapse)
+- [Klipper-Backup](https://github.com/Staubgeborener/Klipper-Backup)
