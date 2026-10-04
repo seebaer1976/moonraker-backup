@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Moonraker Backup</title>
+  <style>
+    :root {
+      --bg: #1e1e1e;
+      --card: #2a2a2a;
+      --text: #e8e8e8;
+      --muted: #9a9a9a;
+      --accent: #56a0f0;
+      --ok: #4caf50;
+      --warn: #ff9800;
+      --danger: #e53935;
+      --border: #3a3a3a;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.45;
+    }
+    header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      gap: .75rem;
+      align-items: center;
+      justify-content: space-between;
+    }
+    h1 { font-size: 1.15rem; margin: 0; font-weight: 600; }
+    main { max-width: 960px; margin: 0 auto; padding: 1rem; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+    label { font-size: .85rem; color: var(--muted); }
+    input[type=text], input[type=number] {
+      background: #1a1a1a;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 6px;
+      padding: .45rem .6rem;
+      min-width: 12rem;
+    }
+    button {
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      padding: .5rem .9rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    button.secondary { background: #444; }
+    button.danger { background: var(--danger); }
+    table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+    th, td { text-align: left; padding: .55rem .4rem; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-weight: 500; }
+    .muted { color: var(--muted); }
+    .ok { color: var(--ok); }
+    .err { color: var(--danger); }
+    .stat { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; }
+    .stat div {
+      background: #232323;
+      border-radius: 8px;
+      padding: .75rem;
+    }
+    .stat .v { font-size: 1.05rem; font-weight: 600; margin-top: .25rem; }
+    #log {
+      font-family: ui-monospace, monospace;
+      font-size: .8rem;
+      white-space: pre-wrap;
+      max-height: 160px;
+      overflow: auto;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Moonraker Config-Backup</h1>
+    <div class="row">
+      <label>Moonraker URL</label>
+      <input id="baseUrl" type="text" value="http://127.0.0.1:7125" style="min-width:18rem" />
+      <button class="secondary" onclick="refreshAll()">Aktualisieren</button>
+    </div>
+  </header>
+  <main>
+    <div class="card">
+      <div class="stat" id="statusCards">
+        <div><div class="muted">Status</div><div class="v" id="sEnabled">–</div></div>
+        <div><div class="muted">Druck</div><div class="v" id="sPrint">–</div></div>
+        <div><div class="muted">Letztes Backup</div><div class="v" id="sLast">–</div></div>
+        <div><div class="muted">Größe</div><div class="v" id="sSize">–</div></div>
+        <div><div class="muted">Anzahl</div><div class="v" id="sCount">–</div></div>
+      </div>
+      <p class="muted" style="margin:.75rem 0 0">Quelle: <span id="sSource">–</span></p>
+      <p class="muted" style="margin:.35rem 0 0; font-size:.85rem">
+        Während Druck/Pause: kein Create/Restore.
+        Vor Update Manager: automatisches Backup (wenn aktiv).
+      </p>
+    </div>
+
+    <div class="card">
+      <div class="row" style="margin-bottom:.75rem">
+        <input id="note" type="text" placeholder="Notiz (optional)" style="flex:1; min-width:12rem" />
+        <button id="btnCreate" onclick="createBackup()">Backup erstellen</button>
+      </div>
+      <div id="msg" class="muted"></div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 .75rem; font-size:1rem">Backups</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>Datei</th>
+            <th>Zeit</th>
+            <th>Größe</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 .75rem; font-size:1rem">Einstellungen</h2>
+      <div class="row" style="margin-bottom:.5rem">
+        <label>max_backups</label>
+        <input id="maxBackups" type="number" min="1" max="100" />
+        <label>name_prefix</label>
+        <input id="namePrefix" type="text" />
+      </div>
+      <div class="row" style="margin-bottom:.5rem">
+        <label>exclude</label>
+        <input id="exclude" type="text" style="flex:1; min-width:16rem" />
+      </div>
+      <div class="row" style="margin-bottom:.5rem">
+        <label><input id="blockPrint" type="checkbox" /> block_during_print</label>
+        <label><input id="beforeUpdate" type="checkbox" /> backup_before_update</label>
+      </div>
+      <button class="secondary" onclick="saveSettings()">Settings speichern</button>
+      <p class="muted" style="margin-top:.5rem; font-size:.8rem">
+        Werte, die in moonraker.conf unter [backup] stehen, sind blockiert (wie bei Timelapse).
+      </p>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 .5rem; font-size:1rem">Log</h2>
+      <div id="log"></div>
+    </div>
+  </main>
+  <script>
+    const logEl = document.getElementById('log');
+    function log(msg) {
+      logEl.textContent = new Date().toLocaleTimeString() + '  ' + msg + '\n' + logEl.textContent;
+    }
+    function base() {
+      return document.getElementById('baseUrl').value.replace(/\/$/, '');
+    }
+    async function api(path, opts = {}) {
+      const url = base() + path;
+      const res = await fetch(url, opts);
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text }; }
+      if (!res.ok) {
+        const err = (data && (data.error || data.message)) || res.statusText;
+        throw new Error(typeof err === 'object' ? JSON.stringify(err) : err);
+      }
+      return data.result !== undefined ? data.result : data;
+    }
+    function setMsg(t, ok) {
+      const el = document.getElementById('msg');
+      el.textContent = t || '';
+      el.className = ok === false ? 'err' : (ok ? 'ok' : 'muted');
+    }
+    async function refreshAll() {
+      try {
+        const st = await api('/machine/backup/status');
+        document.getElementById('sEnabled').textContent = st.enabled ? 'aktiv' : 'deaktiviert';
+        document.getElementById('sCount').textContent = st.backup_count ?? 0;
+        document.getElementById('sSource').textContent = st.source_path || '–';
+        const printLabel = st.print_blocked
+          ? ('gesperrt (' + (st.print_state || '?') + ')')
+          : (st.print_state || '–');
+        document.getElementById('sPrint').textContent = printLabel;
+        document.getElementById('sPrint').className = 'v' + (st.print_blocked ? ' err' : '');
+        const last = st.last_backup;
+        document.getElementById('sLast').textContent = last ? last.mtime_iso : 'keins';
+        document.getElementById('sSize').textContent = last ? last.size_human : '–';
+        const s = st.settings || {};
+        document.getElementById('maxBackups').value = s.max_backups ?? 20;
+        document.getElementById('namePrefix').value = s.name_prefix ?? 'config-backup';
+        document.getElementById('exclude').value = s.exclude ?? '';
+        document.getElementById('blockPrint').checked = s.block_during_print !== false;
+        document.getElementById('beforeUpdate').checked = s.backup_before_update !== false;
+        document.getElementById('btnCreate').disabled = !!st.print_blocked || !!st.busy;
+        const list = await api('/machine/backup/list');
+        const tb = document.getElementById('tbody');
+        tb.innerHTML = '';
+        (list.backups || []).forEach(b => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${b.filename}${b.note ? `<div class="muted">${b.note}</div>` : ''}</td>
+            <td>${b.mtime_iso || ''}</td>
+            <td>${b.size_human || ''}</td>
+            <td class="row">
+              <button class="secondary" onclick="downloadBackup('${b.filename}')">Download</button>
+              <button class="secondary" onclick="restoreBackup('${b.filename}')">Restore</button>
+              <button class="danger" onclick="deleteBackup('${b.filename}')">Löschen</button>
+            </td>`;
+          tb.appendChild(tr);
+        });
+        log('Status aktualisiert');
+      } catch (e) {
+        setMsg(String(e.message || e), false);
+        log('Fehler: ' + e);
+      }
+    }
+    async function createBackup() {
+      const btn = document.getElementById('btnCreate');
+      btn.disabled = true;
+      try {
+        const note = document.getElementById('note').value || '';
+        const body = new URLSearchParams({ note });
+        const r = await api('/machine/backup/create', { method: 'POST', body });
+        setMsg('Backup erstellt: ' + (r.backup && r.backup.filename), true);
+        log('Create OK ' + JSON.stringify(r.backup));
+        await refreshAll();
+      } catch (e) {
+        setMsg(String(e.message || e), false);
+        log('Create Fehler: ' + e);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+    function downloadBackup(name) {
+      window.open(base() + '/server/files/backups/' + encodeURIComponent(name), '_blank');
+    }
+    async function deleteBackup(name) {
+      if (!confirm('Backup löschen?\n' + name)) return;
+      try {
+        const body = new URLSearchParams({ filename: name });
+        await api('/machine/backup/delete', { method: 'POST', body });
+        setMsg('Gelöscht: ' + name, true);
+        await refreshAll();
+      } catch (e) {
+        setMsg(String(e.message || e), false);
+      }
+    }
+    async function restoreBackup(name) {
+      if (!confirm('Wiederherstellen aus:\n' + name + '\n\nAktuelle Config wird vorher gesichert.')) return;
+      try {
+        const body = new URLSearchParams({ filename: name });
+        const r = await api('/machine/backup/restore', { method: 'POST', body });
+        setMsg('Restore OK – ggf. FIRMWARE_RESTART', true);
+        log('Restore: ' + JSON.stringify(r));
+        await refreshAll();
+      } catch (e) {
+        setMsg(String(e.message || e), false);
+      }
+    }
+    async function saveSettings() {
+      try {
+        const body = new URLSearchParams({
+          max_backups: document.getElementById('maxBackups').value,
+          name_prefix: document.getElementById('namePrefix').value,
+          exclude: document.getElementById('exclude').value,
+          block_during_print: document.getElementById('blockPrint').checked ? 'true' : 'false',
+          backup_before_update: document.getElementById('beforeUpdate').checked ? 'true' : 'false',
+        });
+        await api('/machine/backup/settings', { method: 'POST', body });
+        setMsg('Settings gespeichert', true);
+        await refreshAll();
+      } catch (e) {
+        setMsg(String(e.message || e), false);
+      }
+    }
+    refreshAll();
+  </script>
+</body>
+</html>
